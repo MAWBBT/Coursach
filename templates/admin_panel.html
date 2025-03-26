@@ -1,0 +1,50 @@
+{% extends "index.html" %}
+
+{% block content %}
+<h2>Административная панель</h2>
+
+<!-- Управление товарами -->
+<div class="admin-sections">
+    <h3>Управление товарами</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Название</th>
+                <th>Цена</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for product in products %}
+            <tr>
+                <td>{{ product.ProductID }}</td>
+                <td>{{ product.ProductName }}</td>
+                <td>{{ product.Price }} руб.</td>
+                <td>
+                    <a href="{{ url_for('edit_product', product_id=product.ProductID) }}">Редактировать</a>
+                    <form action="{{ url_for('delete_product', product_id=product.ProductID) }}" method="POST">
+                        <button type="submit">Удалить</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Добавление нового товара -->
+    <h3>Добавить новый товар</h3>
+    <form method="POST" action="{{ url_for('add_product') }}">
+        <label for="product_name">Название:</label>
+        <input type="text" id="product_name" name="product_name" required><br>
+
+        <label for="price">Цена:</label>
+        <input type="number" step="0.01" id="price" name="price" required><br>
+
+        <label for="description">Описание:</label>
+        <textarea id="description" name="description"></textarea><br>
+
+        <button type="submit">Добавить товар</button>
+    </form>
+</div>
+{% endblock %}

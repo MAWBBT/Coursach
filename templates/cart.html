@@ -1,0 +1,23 @@
+{% extends "index.html" %}
+
+{% block content %}
+<h2>Корзина</h2>
+<div class="cart-items">
+    {% if cart %}
+        <ul>
+            {% for item in cart %}
+            <li>
+                <span>{{ item.ProductName }} - {{ item.Quantity }} шт. ({{ item.UnitPrice }} руб.)</span>
+                <form action="{{ url_for('remove_from_cart', product_id=item.ProductID) }}" method="POST">
+                    <button type="submit">Удалить</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        <p>Общая стоимость: {{ total_amount }} руб.</p>
+        <a href="{{ url_for('checkout') }}">Оформить заказ</a>
+    {% else %}
+        <p>Ваша корзина пуста.</p>
+    {% endif %}
+</div>
+{% endblock %}

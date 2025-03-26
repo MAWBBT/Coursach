@@ -1,0 +1,17 @@
+{% extends "index.html" %}
+
+{% block content %}
+<h2>Каталог товаров</h2>
+<div class="product-list">
+    {% for product in products %}
+    <div class="product">
+        <h3>{{ product['ProductName'] }}</h3>
+        <p>{{ product['Description'] }}</p>
+        <p>Цена: {{ product['Price'] }} руб.</p>
+        <form action="{{ url_for('add_to_cart', product_id=product['ProductID']) }}" method="POST">
+            <button type="submit">Добавить в корзину</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
