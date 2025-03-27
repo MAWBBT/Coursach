@@ -1,0 +1,36 @@
+{% extends "index.html" %}
+
+{% block content %}
+<h2>Подтверждение заказа</h2>
+
+<p>Номер заказа: {{ order.OrderID }}</p>
+<p>Дата заказа: {{ order.OrderDate }}</p>
+<p>Статус: {{ order.Status }}</p>
+<p>Общая стоимость: {{ order.TotalAmount }} руб.</p>
+<p>Способ оплаты: {{ order.PaymentMethod }}</p>
+<p>Адрес доставки: {{ order.DeliveryAddress }}</p>
+
+<h3>Товары в заказе:</h3>
+<table class="order-items-table">
+    <thead>
+        <tr>
+            <th>Товар</th>
+            <th>Количество</th>
+            <th>Цена за единицу</th>
+            <th>Сумма</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in order_items %}
+        <tr>
+            <td>{{ item.ProductName }}</td>
+            <td>{{ item.Quantity }}</td>
+            <td>{{ item.Price }} руб.</td>
+            <td>{{ item.Price * item.Quantity }} руб.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<a href="{{ url_for('home') }}">На главную</a>
+{% endblock %}

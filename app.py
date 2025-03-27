@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
+import traceback
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Секретный ключ для работы с Flask
@@ -62,12 +63,56 @@ def manage_users():
         flash('Доступ запрещен!', 'error')
         return redirect(url_for('home'))
 
-    # Получение списка пользователей из базы данных
-    conn = get_db_connection()
-    users = conn.execute("SELECT * FROM Users").fetchall()
-    conn.close()
+    try:
+        conn = get_db_connection()
 
-    return render_template('manage_users.html', users=users)
+        # Получение списка пользователей из базы данных
+        users = conn.execute("SELECT * FROM Users").fetchall()
+        conn.close()
+
+        return render_template('manage_users.html', users=users)
+
+    except sqlite3.Error as e:
+        flash(f'Ошибка базы данных: {e}', 'error')
+        return redirect(url_for('home'))
+
+@app.route('/update_cart/<int:cart_id>', methods=['POST'])
+def update_cart(cart_id):
+    try:
+        new_quantity = int(request.form['quantity'])
+
+        if new_quantity <= 0:
+            flash('Количество должно быть больше 0!', 'error')
+            return redirect(url_for('cart'))
+
+        conn = get_db_connection()
+        conn.execute(
+            "UPDATE Cart SET Quantity = ? WHERE CartID = ?",
+            (new_quantity, cart_id)
+        )
+        conn.commit()
+        flash('Количество товара успешно обновлено!', 'success')
+    except Exception as e:
+        flash(f'Ошибка при обновлении количества товара: {e}', 'error')
+    finally:
+        conn.close()
+
+    return redirect(url_for('cart'))
+
+
+@app.route('/remove_from_cart/<int:cart_id>', methods=['POST'])
+def remove_from_cart(cart_id):
+    try:
+        conn = get_db_connection()
+        conn.execute("DELETE FROM Cart WHERE CartID = ?", (cart_id,))
+        conn.commit()
+        flash('Товар успешно удален из корзины!', 'success')
+    except Exception as e:
+        flash(f'Ошибка при удалении товара из корзины: {e}', 'error')
+    finally:
+        conn.close()
+
+    return redirect(url_for('cart'))
 
 @app.route('/update_user_role/<int:user_id>', methods=['POST'])
 def update_user_role(user_id):
@@ -95,39 +140,52 @@ def update_user_role(user_id):
 # Страница авторизации
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Если пользователь уже авторизован, перенаправляем его на домашнюю страницу
+    if 'user_id' in session:
+        return redirect(url_for('home'))
+
     if request.method == 'POST':
-        login = request.form['login']
-        password = request.form['password']
+        # Получение данных из формы
+        login = request.form.get('login')
+        password = request.form.get('password')
+
+        if not login or not password:
+            flash('Пожалуйста, заполните все поля!', 'error')
+            return redirect(url_for('login'))
 
         try:
+            # Подключение к базе данных
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            # Поиск пользователя по логину
-            cursor.execute("SELECT * FROM Users WHERE Login = ?", (login,))
-            user = cursor.fetchone()
+            # Поиск пользователя в базе данных
+            user = cursor.execute(
+                "SELECT * FROM Users WHERE Login = ?", (login,)
+            ).fetchone()
 
-            if user and check_password_hash(user['PasswordHash'], password):  # Проверка хеша пароля
+            if user and check_password_hash(user['PasswordHash'], password):
+                # Сохранение данных пользователя в сессии
                 session['user_id'] = user['UserID']
-                session['role'] = user['Role']  # Сохраняем роль пользователя в сессии
+                session['role'] = user['Role']
                 flash('Вы успешно вошли!', 'success')
 
-                # Перенаправление в зависимости от роли
+                # Перенаправление в зависимости от роли пользователя
                 if user['Role'] == 'admin':
-                    return redirect(url_for('admin_panel'))  # Админская панель
+                    return redirect(url_for('admin_panel'))
                 else:
-                    return redirect(url_for('home'))  # Главная страница для клиентов
-
+                    return redirect(url_for('home'))
             else:
                 flash('Неверный логин или пароль!', 'error')
+                return redirect(url_for('login'))
 
-        except sqlite3.Error as e:
-            flash(f'Ошибка базы данных: {e}', 'error')
+        except Exception as e:
+            flash(f'Ошибка при входе: {e}', 'error')
+            return redirect(url_for('login'))
 
         finally:
-            if conn:
-                conn.close()
+            conn.close()
 
+    # Если метод GET, отображаем форму входа
     return render_template('login.html')
 
 # Страница каталога товаров
@@ -197,75 +255,184 @@ def delete_category(category_id):
 
 @app.route('/add_to_cart/<int:product_id>', methods=['POST'])
 def add_to_cart(product_id):
-    # Получение данных о товаре из базы данных
-    conn = get_db_connection()
-    product = conn.execute("SELECT * FROM Products WHERE ProductID = ?", (product_id,)).fetchone()
-    conn.close()
+    try:
+        if 'user_id' not in session:
+            flash('Для добавления товара в корзину необходимо войти в систему.', 'error')
+            return redirect(url_for('login'))
 
-    if not product:
-        flash('Товар не найден!', 'error')
-        return redirect(url_for('catalog'))
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
-    # Инициализация корзины в сессии
-    if 'cart' not in session:
-        session['cart'] = []
-
-    # Проверка, есть ли товар уже в корзине
-    cart = session['cart']
-    for item in cart:
-        if item['ProductID'] == product['ProductID']:
-            item['Quantity'] += 1
-            session.modified = True
-            flash('Товар добавлен в корзину!', 'success')
+        product = conn.execute("SELECT * FROM Products WHERE ProductID = ?", (product_id,)).fetchone()
+        if not product:
+            flash('Товар не найден!', 'error')
             return redirect(url_for('catalog'))
 
-    # Добавление нового товара в корзину
-    cart.append({
-        'ProductID': product['ProductID'],
-        'ProductName': product['ProductName'],
-        'UnitPrice': product['Price'],
-        'Quantity': 1
-    })
-    session.modified = True
-    flash('Товар добавлен в корзину!', 'success')
+        user_id = session['user_id']
+        cart_item = conn.execute(
+            "SELECT * FROM Cart WHERE UserID = ? AND ProductID = ?", (user_id, product_id)
+        ).fetchone()
+
+        if cart_item:
+            new_quantity = cart_item['Quantity'] + 1
+            conn.execute(
+                "UPDATE Cart SET Quantity = ? WHERE CartID = ?", (new_quantity, cart_item['CartID'])
+            )
+        else:
+            conn.execute(
+                "INSERT INTO Cart (UserID, ProductID, Quantity) VALUES (?, ?, 1)",
+                (user_id, product_id)
+            )
+
+        conn.commit()
+        flash('Товар успешно добавлен в корзину!', 'success')
+    except Exception as e:
+        traceback.print_exc()  # Выводит трассировку ошибки
+        flash('Произошла ошибка при добавлении товара в корзину.', 'error')
+    finally:
+        if conn:
+            conn.close()
+
     return redirect(url_for('catalog'))
 
 # Корзина
 @app.route('/cart')
 def cart():
-    if 'cart' not in session or not session['cart']:
-        return render_template('cart.html', cart=None, total_amount=0)
+    # Проверка авторизации пользователя
+    if 'user_id' not in session:
+        flash('Для просмотра корзины необходимо войти в систему.', 'error')
+        return redirect(url_for('login'))
 
-    cart = session['cart']
-    total_amount = sum(item['UnitPrice'] * item['Quantity'] for item in cart)
-    return render_template('cart.html', cart=cart, total_amount=total_amount)
+    try:
+        conn = get_db_connection()
+        user_id = session['user_id']
 
-@app.route('/remove_from_cart/<int:product_id>', methods=['POST'])
-def remove_from_cart(product_id):
-    if 'cart' not in session or not session['cart']:
-        flash('Корзина пуста!', 'error')
-        return redirect(url_for('cart'))
+        # Получение товаров из корзины
+        cart_items = conn.execute(
+            """
+            SELECT Cart.CartID, Products.ProductID, Products.ProductName, Products.Price, Cart.Quantity
+            FROM Cart
+            JOIN Products ON Cart.ProductID = Products.ProductID
+            WHERE Cart.UserID = ?
+            """,
+            (user_id,)
+        ).fetchall()
 
-    # Поиск товара в корзине
-    cart = session['cart']
-    for item in cart:
-        if item['ProductID'] == product_id:
-            cart.remove(item)
-            session.modified = True
-            flash('Товар удален из корзины!', 'success')
-            return redirect(url_for('cart'))
+        # Вычисление общей стоимости
+        total_price = sum(item['Price'] * item['Quantity'] for item in cart_items)
 
-    flash('Товар не найден в корзине!', 'error')
-    return redirect(url_for('cart'))
+        conn.close()
+
+        # Передача данных в шаблон
+        return render_template('cart.html', cart_items=cart_items, total_price=total_price)
+
+    except Exception as e:
+        flash(f'Ошибка при загрузке корзины: {e}', 'error')
+        return redirect(url_for('home'))
 
 # Оформление заказа
 @app.route('/checkout', methods=['GET', 'POST'])
 def checkout():
+    if 'user_id' not in session:
+        flash('Для оформления заказа необходимо войти в систему.', 'error')
+        return redirect(url_for('login'))
+
     if request.method == 'POST':
-        # Логика сохранения заказа в базу данных
-        flash('Заказ успешно оформлен!', 'success')
-        return redirect(url_for('home'))
+        try:
+            # Получение данных из формы
+            delivery_address = request.form.get('delivery_address')
+            payment_method = request.form.get('payment_method')
+
+            # Проверка обязательных полей
+            if not delivery_address or not payment_method:
+                flash('Пожалуйста, заполните все обязательные поля.', 'error')
+                return redirect(url_for('checkout'))
+
+            user_id = session['user_id']
+
+            # Получение товаров из корзины
+            conn = get_db_connection()
+            cart_items = conn.execute(
+                """
+                SELECT Cart.CartID, Products.ProductID, Products.ProductName, Products.Price, Cart.Quantity
+                FROM Cart
+                JOIN Products ON Cart.ProductID = Products.ProductID
+                WHERE Cart.UserID = ?
+                """,
+                (user_id,)
+            ).fetchall()
+
+            if not cart_items:
+                flash('Ваша корзина пуста!', 'error')
+                return redirect(url_for('cart'))
+
+            # Создание заказа
+            total_price = sum(item['Price'] * item['Quantity'] for item in cart_items)
+
+            conn.execute(
+                "INSERT INTO Orders (UserID, OrderDate, Status, TotalAmount, PaymentMethod, DeliveryAddress) VALUES (?, datetime('now'), ?, ?, ?, ?)",
+                (user_id, 'pending', total_price, payment_method, delivery_address)
+            )
+            order_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+            # Сохранение элементов заказа
+            for item in cart_items:
+                conn.execute(
+                    "INSERT INTO OrderItems (OrderID, ProductID, Quantity, UnitPrice) VALUES (?, ?, ?, ?)",
+                    (order_id, item['ProductID'], item['Quantity'], item['Price'])
+                )
+
+            # Очистка корзины
+            conn.execute("DELETE FROM Cart WHERE UserID = ?", (user_id,))
+            conn.commit()
+
+            flash('Заказ успешно оформлен!', 'success')
+            return redirect(url_for('order_confirmation', order_id=order_id))
+
+        except Exception as e:
+            flash(f'Ошибка при оформлении заказа: {e}', 'error')
+            return redirect(url_for('cart'))
+        finally:
+            conn.close()
+
+    # Если метод GET, отображаем форму оформления заказа
     return render_template('checkout.html')
+
+@app.route('/order_confirmation/<int:order_id>')
+def order_confirmation(order_id):
+    try:
+        # Получение данных о заказе из базы данных
+        conn = get_db_connection()
+        order = conn.execute(
+            """
+            SELECT * FROM Orders
+            WHERE OrderID = ?
+            """,
+            (order_id,)
+        ).fetchone()
+
+        if not order:
+            flash('Заказ не найден!', 'error')
+            return redirect(url_for('home'))
+
+        # Получение элементов заказа
+        order_items = conn.execute(
+            """
+            SELECT OrderItems.Quantity, Products.ProductName, Products.Price
+            FROM OrderItems
+            JOIN Products ON OrderItems.ProductID = Products.ProductID
+            WHERE OrderItems.OrderID = ?
+            """,
+            (order_id,)
+        ).fetchall()
+
+        conn.close()
+
+        return render_template('order_confirmation.html', order=order, order_items=order_items)
+
+    except Exception as e:
+        flash(f'Ошибка при загрузке данных о заказе: {e}', 'error')
+        return redirect(url_for('home'))
 
 # Административная панель
 @app.route('/admin')
@@ -275,13 +442,46 @@ def admin_panel():
         flash('Доступ запрещен!', 'error')
         return redirect(url_for('home'))
 
-    # Получение данных о товарах и категориях
-    conn = get_db_connection()
-    products = conn.execute("SELECT * FROM Products").fetchall()
-    categories = conn.execute("SELECT * FROM Categories").fetchall()
-    conn.close()
+    try:
+        conn = get_db_connection()
 
-    return render_template('admin_panel.html', products=products, categories=categories)
+        # Получение данных о товарах
+        products = conn.execute("SELECT * FROM Products").fetchall()
+
+        # Получение данных о категориях
+        categories = conn.execute("SELECT * FROM Categories").fetchall()
+
+        conn.close()
+
+        # Передача данных в шаблон
+        return render_template('admin_panel.html', products=products, categories=categories)
+
+    except sqlite3.Error as e:
+        flash(f'Ошибка базы данных: {e}', 'error')
+        return redirect(url_for('home'))
+
+@app.route('/delete_user/<int:user_id>', methods=['POST'])
+def delete_user(user_id):
+    # Проверка роли пользователя
+    if session.get('role') != 'admin':
+        flash('Доступ запрещен!', 'error')
+        return redirect(url_for('home'))
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Удаление пользователя из таблицы Users
+        cursor.execute("DELETE FROM Users WHERE UserID = ?", (user_id,))
+        conn.commit()
+        flash('Пользователь успешно удален!', 'success')
+    except sqlite3.Error as e:
+        flash(f'Ошибка базы данных: {e}', 'error')
+    finally:
+        if conn:
+            conn.close()
+
+    return redirect(url_for('manage_users'))
 
 # Добавление нового товара
 @app.route('/add_product', methods=['POST'])
@@ -318,27 +518,54 @@ def add_product():
     return redirect(url_for('admin_panel'))
 
 # Редактирование товара
-@app.route('/edit_product/<int:product_id>', methods=['POST'])
+@app.route('/edit_product/<int:product_id>', methods=['GET', 'POST'])
 def edit_product(product_id):
     # Проверка роли пользователя
     if session.get('role') != 'admin':
         flash('Доступ запрещен!', 'error')
         return redirect(url_for('home'))
 
-    new_price = request.form['new_price']
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE Products SET Price = ? WHERE ProductID = ?", (new_price, product_id))
-        conn.commit()
-        flash('Товар успешно обновлен!', 'success')
-    except sqlite3.Error as e:
-        flash(f'Ошибка базы данных: {e}', 'error')
-    finally:
-        if conn:
+    conn = get_db_connection()
+    product = conn.execute("SELECT * FROM Products WHERE ProductID = ?", (product_id,)).fetchone()
+
+    if not product:
+        flash('Товар не найден!', 'error')
+        return redirect(url_for('admin_panel'))
+
+    if request.method == 'POST':
+        # Получение данных из формы
+        product_name = request.form['product_name']
+        price = request.form['price']
+        category_id = request.form['category_id']
+        manufacturer = request.form['manufacturer']
+        stock_quantity = request.form['stock_quantity']
+        compatibility = request.form['compatibility']
+        description = request.form['description']
+
+        try:
+            # Обновление данных о товаре
+            conn.execute(
+                """
+                UPDATE Products
+                SET ProductName = ?, Price = ?, CategoryID = ?, Manufacturer = ?,
+                    StockQuantity = ?, Compatibility = ?, Description = ?
+                WHERE ProductID = ?
+                """,
+                (product_name, price, category_id, manufacturer, stock_quantity, compatibility, description, product_id)
+            )
+            conn.commit()
+            flash('Товар успешно обновлен!', 'success')
+            return redirect(url_for('admin_panel'))
+        except sqlite3.Error as e:
+            flash(f'Ошибка базы данных: {e}', 'error')
+        finally:
             conn.close()
 
-    return redirect(url_for('admin_panel'))
+    # Получение списка категорий для выпадающего списка
+    categories = conn.execute("SELECT * FROM Categories").fetchall()
+    conn.close()
+
+    return render_template('edit_product.html', product=product, categories=categories)
 
 @app.route('/add_category', methods=['POST'])
 def add_category():

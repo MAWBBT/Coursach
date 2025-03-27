@@ -2,20 +2,16 @@
 
 {% block content %}
 <h2>Оформление заказа</h2>
-<form method="POST">
-    <label for="name">Имя:</label>
-    <input type="text" id="name" name="name" required><br>
 
-    <label for="address">Адрес доставки:</label>
-    <input type="text" id="address" name="address" required><br>
-
-    <label for="phone">Телефон:</label>
-    <input type="text" id="phone" name="phone" required><br>
+<form method="POST" action="{{ url_for('checkout') }}">
+    <label for="delivery_address">Адрес доставки:</label>
+    <input type="text" id="delivery_address" name="delivery_address" required><br>
 
     <label for="payment_method">Способ оплаты:</label>
     <select id="payment_method" name="payment_method" required>
         <option value="card">Банковская карта</option>
         <option value="cash">Наличные</option>
+        <option value="online">Онлайн-платеж</option>
     </select><br>
 
     <button type="submit">Подтвердить заказ</button>

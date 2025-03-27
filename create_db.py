@@ -42,8 +42,8 @@ def create_database_and_tables():
                 OrderID INTEGER PRIMARY KEY AUTOINCREMENT,
                 UserID INTEGER,
                 OrderDate DATETIME,
-                Status TEXT CHECK(Status IN ('pending', 'processing', 'delivered')),
-                TotalAmount REAL,
+                Status TEXT DEFAULT 'pending',
+                TotalAmount DECIMAL(10, 2),
                 PaymentMethod TEXT,
                 DeliveryAddress TEXT,
                 FOREIGN KEY (UserID) REFERENCES Users(UserID)
@@ -55,7 +55,7 @@ def create_database_and_tables():
                 OrderID INTEGER,
                 ProductID INTEGER,
                 Quantity INTEGER,
-                UnitPrice REAL,
+                UnitPrice DECIMAL(10, 2),
                 FOREIGN KEY (OrderID) REFERENCES Orders(OrderID),
                 FOREIGN KEY (ProductID) REFERENCES Products(ProductID)
             )
@@ -71,6 +71,16 @@ def create_database_and_tables():
                 FOREIGN KEY (UserID) REFERENCES Users(UserID),
                 FOREIGN KEY (ProductID) REFERENCES Products(ProductID)
             )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS Cart (
+                CartID INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserID INTEGER,
+                ProductID INTEGER,
+                Quantity INTEGER,
+                FOREIGN KEY (UserID) REFERENCES Users(UserID),
+                FOREIGN KEY (ProductID) REFERENCES Products(ProductID)
+            );
             """
         ]
 
