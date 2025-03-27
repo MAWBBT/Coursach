@@ -30,7 +30,7 @@
                     <!-- Кнопка удаления пользователя -->
                     <form action="{{ url_for('delete_user', user_id=user.UserID) }}" method="POST"
                           onsubmit="return confirm('Вы уверены, что хотите удалить этого пользователя?');">
-                        <button type="submit">Удалить</button>
+                        <button type="submit", class="color1">Удалить</button>
                     </form>
                 </td>
             </tr>

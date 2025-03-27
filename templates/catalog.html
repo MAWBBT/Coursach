@@ -22,9 +22,23 @@
         <h3>{{ product.ProductName }}</h3>
         <p class="product-price">{{ product.Price }} руб.</p>
         <p class="product-description">{{ product.Description | truncate(50) }}</p>
+        <p>В наличии: {{ product.StockQuantity }} шт.</p>
+
+        {% if product.StockQuantity > 0 %}
         <form action="{{ url_for('add_to_cart', product_id=product.ProductID) }}" method="POST">
-            <button type="submit" class="add-to-cart-btn">Добавить в корзину</button>
+            <input 
+                type="number" 
+                name="quantity" 
+                min="1" 
+                max="{{ product.StockQuantity }}" 
+                value="1" 
+                required
+            >
+            <button type="submit">Добавить в корзину</button>
         </form>
+        {% else %}
+        <p class="out-of-stock">Нет в наличии</p>
+        {% endif %}
     </div>
     {% endfor %}
 </div>

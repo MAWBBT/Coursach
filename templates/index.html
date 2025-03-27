@@ -11,14 +11,15 @@
         <h1>Интернет-магазин автозапчастей</h1>
         <nav>
             <ul>
-                <li><a href="/">Главная</a></li>
-                <li><a href="/catalog">Каталог</a></li>
-                <li><a href="/cart">Корзина</a></li>
-                {% if session.get('user_id') %}
-                    <li><a href="/logout">Выйти</a></li>
+                <li><a href="{{ url_for('home') }}">Главная</a></li>
+                <li><a href="{{ url_for('catalog') }}">Каталог</a></li>
+                <li><a href="{{ url_for('cart') }}">Корзина</a></li>
+                {% if 'user_id' in session %}
+                    <li><a href="{{ url_for('orders') }}">Заказы</a></li>
+                    <li><a href="{{ url_for('logout') }}">Выйти</a></li>
                 {% else %}
-                    <li><a href="/login">Авторизация</a></li>
-                    <li><a href="/register">Регистрация</a></li>
+                    <li><a href="{{ url_for('login') }}">Войти</a></li>
+                    <li><a href="{{ url_for('register') }}">Регистрация</a></li>
                 {% endif %}
             </ul>
         </nav>

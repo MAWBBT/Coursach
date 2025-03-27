@@ -27,12 +27,12 @@ def create_database_and_tables():
             """
             CREATE TABLE IF NOT EXISTS Products (
                 ProductID INTEGER PRIMARY KEY AUTOINCREMENT,
-                ProductName TEXT,
+                ProductName TEXT NOT NULL,
                 Description TEXT,
-                Price REAL,
+                Price DECIMAL(10, 2) NOT NULL,
                 CategoryID INTEGER,
                 Manufacturer TEXT,
-                StockQuantity INTEGER,
+                StockQuantity INTEGER DEFAULT 0,
                 Compatibility TEXT,
                 FOREIGN KEY (CategoryID) REFERENCES Categories(CategoryID)
             )
@@ -57,18 +57,6 @@ def create_database_and_tables():
                 Quantity INTEGER,
                 UnitPrice DECIMAL(10, 2),
                 FOREIGN KEY (OrderID) REFERENCES Orders(OrderID),
-                FOREIGN KEY (ProductID) REFERENCES Products(ProductID)
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS Reviews (
-                ReviewID INTEGER PRIMARY KEY AUTOINCREMENT,
-                UserID INTEGER,
-                ProductID INTEGER,
-                ReviewText TEXT,
-                Rating INTEGER CHECK(Rating BETWEEN 1 AND 5),
-                ReviewDate DATETIME,
-                FOREIGN KEY (UserID) REFERENCES Users(UserID),
                 FOREIGN KEY (ProductID) REFERENCES Products(ProductID)
             )
             """,
@@ -108,7 +96,6 @@ def populate_data(cursor):
     # Добавление данных в таблицу Users
     users = [
         ("admin", generate_password_hash("admin_password")),  # Логин: admin, Пароль: admin_password
-        ("user", generate_password_hash("user_password"))     # Логин: user, Пароль: user_password
     ]
     for login, password_hash in users:
         try:
@@ -116,29 +103,6 @@ def populate_data(cursor):
                            (login, password_hash, "admin" if login == "admin" else "client"))
         except sqlite3.IntegrityError:
             print(f"Пользователь с логином '{login}' уже существует. Пропускаем добавление.")
-
-    # Добавление данных в таблицу Categories
-    categories = [("Тормозные системы",), ("Двигатели",), ("Подвеска",)]
-    for category_name in categories:
-        try:
-            cursor.execute("INSERT INTO Categories (CategoryName) VALUES (?)", category_name)
-        except sqlite3.IntegrityError:
-            print(f"Категория '{category_name[0]}' уже существует. Пропускаем добавление.")
-
-    # Добавление данных в таблицу Products
-    products = [
-        ("Тормозные колодки", "Описание тормозных колодок", 1500.00, 1, "Bosch", 50, "Совместимо с Toyota Camry"),
-        ("Масляный фильтр", "Описание масляного фильтра", 300.00, 2, "Mann", 100, "Совместимо с BMW X5"),
-        ("Стойки стабилизатора", "Описание стоек стабилизатора", 800.00, 3, "Lemforder", 30, "Совместимо с Mercedes E-Class")
-    ]
-    for product in products:
-        try:
-            cursor.execute("""
-                INSERT INTO Products (ProductName, Description, Price, CategoryID, Manufacturer, StockQuantity, Compatibility)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, product)
-        except sqlite3.IntegrityError:
-            print(f"Товар '{product[0]}' уже существует. Пропускаем добавление.")
 
 # Запуск функции создания базы данных и таблиц
 if __name__ == "__main__":

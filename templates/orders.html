@@ -1,0 +1,45 @@
+{% extends "index.html" %}
+
+{% block content %}
+<h2>Мои заказы</h2>
+
+{% if orders %}
+    <div class="orders-list">
+        {% for order in orders %}
+        <div class="order-card">
+            <h3>Заказ №{{ order.OrderID }}</h3>
+            <p><strong>Дата:</strong> {{ order.OrderDate }}</p>
+            <p><strong>Статус:</strong> {{ order.Status }}</p>
+            <p><strong>Общая стоимость:</strong> {{ order.TotalAmount }} руб.</p>
+            <p><strong>Способ оплаты:</strong> {{ order.PaymentMethod }}</p>
+            <p><strong>Адрес доставки:</strong> {{ order.DeliveryAddress }}</p>
+
+            <h4>Товары в заказе:</h4>
+            <table class="order-items-table">
+                <thead>
+                    <tr>
+                        <th>Товар</th>
+                        <th>Количество</th>
+                        <th>Цена за единицу</th>
+                        <th>Сумма</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in order_details[order.OrderID] %}
+                    <tr>
+                        <td>{{ item.ProductName }}</td>
+                        <td>{{ item.Quantity }}</td>
+                        <td>{{ item.UnitPrice }} руб.</td>
+                        <td>{{ item.Quantity * item.UnitPrice }} руб.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <p>У вас пока нет заказов.</p>
+    <a href="{{ url_for('catalog') }}">Перейти в каталог</a>
+{% endif %}
+{% endblock %}

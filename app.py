@@ -78,27 +78,45 @@ def manage_users():
 
 @app.route('/update_cart/<int:cart_id>', methods=['POST'])
 def update_cart(cart_id):
-    try:
-        new_quantity = int(request.form['quantity'])
+    if 'user_id' not in session:
+        flash('Для обновления корзины необходимо войти в систему.', 'error')
+        return redirect(url_for('login'))
 
-        if new_quantity <= 0:
-            flash('Количество должно быть больше 0!', 'error')
-            return redirect(url_for('cart'))
+    try:
+        new_quantity = int(request.form.get('quantity'))
+        user_id = session['user_id']
 
         conn = get_db_connection()
+        cart_item = conn.execute(
+            "SELECT ProductID, Quantity FROM Cart WHERE CartID = ? AND UserID = ?", (cart_id, user_id)
+        ).fetchone()
+
+        if not cart_item:
+            flash('Товар не найден в корзине!', 'error')
+            return redirect(url_for('cart'))
+
+        product = conn.execute(
+            "SELECT StockQuantity FROM Products WHERE ProductID = ?", (cart_item['ProductID'],)
+        ).fetchone()
+
+        # Проверка, что новое количество не превышает доступное
+        if new_quantity > product['StockQuantity']:
+            new_quantity = product['StockQuantity']
+            flash(f'Максимальное количество для этого товара: {new_quantity} шт.', 'warning')
+
+        # Обновление корзины
         conn.execute(
-            "UPDATE Cart SET Quantity = ? WHERE CartID = ?",
+            "UPDATE Cart SET Quantity = ? WHERE CartID = ?", 
             (new_quantity, cart_id)
         )
         conn.commit()
-        flash('Количество товара успешно обновлено!', 'success')
+
     except Exception as e:
-        flash(f'Ошибка при обновлении количества товара: {e}', 'error')
+        flash(f'Ошибка: {e}', 'error')
     finally:
         conn.close()
 
     return redirect(url_for('cart'))
-
 
 @app.route('/remove_from_cart/<int:cart_id>', methods=['POST'])
 def remove_from_cart(cart_id):
@@ -192,10 +210,9 @@ def login():
 @app.route('/catalog')
 def catalog():
     conn = get_db_connection()
-    categories = conn.execute("SELECT * FROM Categories").fetchall()
-    products = conn.execute("SELECT * FROM Products").fetchall()
+    products = conn.execute("SELECT ProductID, ProductName, Price, StockQuantity FROM Products").fetchall()
     conn.close()
-    return render_template('catalog.html', products=products, categories=categories)
+    return render_template('catalog.html', products=products)
 
 @app.route('/catalog/<int:category_id>')
 def catalog_by_category(category_id):
@@ -255,79 +272,125 @@ def delete_category(category_id):
 
 @app.route('/add_to_cart/<int:product_id>', methods=['POST'])
 def add_to_cart(product_id):
+    if 'user_id' not in session:
+        flash('Для добавления товара в корзину необходимо войти в систему.', 'error')
+        return redirect(url_for('login'))
+
+    quantity = int(request.form.get('quantity', 1))
+    user_id = session['user_id']
+
     try:
-        if 'user_id' not in session:
-            flash('Для добавления товара в корзину необходимо войти в систему.', 'error')
-            return redirect(url_for('login'))
-
         conn = get_db_connection()
-        cursor = conn.cursor()
+        product = conn.execute(
+            "SELECT StockQuantity FROM Products WHERE ProductID = ?", (product_id,)
+        ).fetchone()
 
-        product = conn.execute("SELECT * FROM Products WHERE ProductID = ?", (product_id,)).fetchone()
         if not product:
             flash('Товар не найден!', 'error')
             return redirect(url_for('catalog'))
 
-        user_id = session['user_id']
+        # Проверка, что запрашиваемое количество не превышает доступное
+        if quantity > product['StockQuantity']:
+            flash(f'Максимальное количество: {product["StockQuantity"]} шт.', 'error')
+            return redirect(url_for('catalog'))
+
+        # Проверка, есть ли товар уже в корзине
         cart_item = conn.execute(
             "SELECT * FROM Cart WHERE UserID = ? AND ProductID = ?", (user_id, product_id)
         ).fetchone()
 
         if cart_item:
-            new_quantity = cart_item['Quantity'] + 1
+            new_quantity = cart_item['Quantity'] + quantity
+            if new_quantity > product['StockQuantity']:
+                flash(f'Недостаточно товара на складе!', 'error')
+                return redirect(url_for('catalog'))
             conn.execute(
                 "UPDATE Cart SET Quantity = ? WHERE CartID = ?", (new_quantity, cart_item['CartID'])
             )
         else:
             conn.execute(
-                "INSERT INTO Cart (UserID, ProductID, Quantity) VALUES (?, ?, 1)",
-                (user_id, product_id)
+                "INSERT INTO Cart (UserID, ProductID, Quantity) VALUES (?, ?, ?)",
+                (user_id, product_id, quantity)
             )
 
         conn.commit()
-        flash('Товар успешно добавлен в корзину!', 'success')
-    except Exception as e:
-        traceback.print_exc()  # Выводит трассировку ошибки
-        flash('Произошла ошибка при добавлении товара в корзину.', 'error')
-    finally:
-        if conn:
-            conn.close()
+        flash('Товар добавлен в корзину!', 'success')
+        return redirect(url_for('catalog'))
 
-    return redirect(url_for('catalog'))
+    except Exception as e:
+        flash(f'Ошибка: {e}', 'error')
+        return redirect(url_for('catalog'))
+    finally:
+        conn.close()
 
 # Корзина
 @app.route('/cart')
 def cart():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    user_id = session['user_id']
+    conn = get_db_connection()
+    cart_items = conn.execute(
+        """
+        SELECT Cart.CartID, Products.ProductID, Products.ProductName, 
+               Products.Price, Cart.Quantity, Products.StockQuantity
+        FROM Cart
+        JOIN Products ON Cart.ProductID = Products.ProductID
+        WHERE Cart.UserID = ?
+        """,
+        (user_id,)
+    ).fetchall()
+    conn.close()
+
+    total_price = sum(item['Price'] * item['Quantity'] for item in cart_items)
+    return render_template('cart.html', cart_items=cart_items, total_price=total_price)
+
+@app.route('/orders')
+def orders():
     # Проверка авторизации пользователя
     if 'user_id' not in session:
-        flash('Для просмотра корзины необходимо войти в систему.', 'error')
+        flash('Для просмотра заказов необходимо войти в систему.', 'error')
         return redirect(url_for('login'))
 
     try:
-        conn = get_db_connection()
         user_id = session['user_id']
 
-        # Получение товаров из корзины
-        cart_items = conn.execute(
+        # Подключение к базе данных
+        conn = get_db_connection()
+
+        # Получение всех заказов пользователя
+        orders = conn.execute(
             """
-            SELECT Cart.CartID, Products.ProductID, Products.ProductName, Products.Price, Cart.Quantity
-            FROM Cart
-            JOIN Products ON Cart.ProductID = Products.ProductID
-            WHERE Cart.UserID = ?
+            SELECT OrderID, OrderDate, Status, TotalAmount, PaymentMethod, DeliveryAddress
+            FROM Orders
+            WHERE UserID = ?
+            ORDER BY OrderDate DESC
             """,
             (user_id,)
         ).fetchall()
 
-        # Вычисление общей стоимости
-        total_price = sum(item['Price'] * item['Quantity'] for item in cart_items)
+        # Получение элементов каждого заказа
+        order_details = {}
+        for order in orders:
+            order_id = order['OrderID']
+            items = conn.execute(
+                """
+                SELECT Products.ProductName, OrderItems.Quantity, OrderItems.UnitPrice
+                FROM OrderItems
+                JOIN Products ON OrderItems.ProductID = Products.ProductID
+                WHERE OrderItems.OrderID = ?
+                """,
+                (order_id,)
+            ).fetchall()
+            order_details[order_id] = items
 
         conn.close()
 
-        # Передача данных в шаблон
-        return render_template('cart.html', cart_items=cart_items, total_price=total_price)
+        return render_template('orders.html', orders=orders, order_details=order_details)
 
     except Exception as e:
-        flash(f'Ошибка при загрузке корзины: {e}', 'error')
+        flash(f'Ошибка при загрузке заказов: {e}', 'error')
         return redirect(url_for('home'))
 
 # Оформление заказа
@@ -339,22 +402,13 @@ def checkout():
 
     if request.method == 'POST':
         try:
-            # Получение данных из формы
-            delivery_address = request.form.get('delivery_address')
-            payment_method = request.form.get('payment_method')
-
-            # Проверка обязательных полей
-            if not delivery_address or not payment_method:
-                flash('Пожалуйста, заполните все обязательные поля.', 'error')
-                return redirect(url_for('checkout'))
-
             user_id = session['user_id']
 
             # Получение товаров из корзины
             conn = get_db_connection()
             cart_items = conn.execute(
                 """
-                SELECT Cart.CartID, Products.ProductID, Products.ProductName, Products.Price, Cart.Quantity
+                SELECT Cart.CartID, Products.ProductID, Products.ProductName, Products.Price, Cart.Quantity, Products.StockQuantity
                 FROM Cart
                 JOIN Products ON Cart.ProductID = Products.ProductID
                 WHERE Cart.UserID = ?
@@ -366,8 +420,16 @@ def checkout():
                 flash('Ваша корзина пуста!', 'error')
                 return redirect(url_for('cart'))
 
+            # Проверка наличия товаров на складе
+            for item in cart_items:
+                if item['StockQuantity'] < item['Quantity']:
+                    flash(f'Товар "{item["ProductName"]}" недоступен в нужном количестве!', 'error')
+                    return redirect(url_for('cart'))
+
             # Создание заказа
             total_price = sum(item['Price'] * item['Quantity'] for item in cart_items)
+            delivery_address = request.form['delivery_address']
+            payment_method = request.form['payment_method']
 
             conn.execute(
                 "INSERT INTO Orders (UserID, OrderDate, Status, TotalAmount, PaymentMethod, DeliveryAddress) VALUES (?, datetime('now'), ?, ?, ?, ?)",
@@ -375,11 +437,15 @@ def checkout():
             )
             order_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-            # Сохранение элементов заказа
+            # Сохранение элементов заказа и уменьшение количества товаров на складе
             for item in cart_items:
                 conn.execute(
                     "INSERT INTO OrderItems (OrderID, ProductID, Quantity, UnitPrice) VALUES (?, ?, ?, ?)",
                     (order_id, item['ProductID'], item['Quantity'], item['Price'])
+                )
+                conn.execute(
+                    "UPDATE Products SET StockQuantity = StockQuantity - ? WHERE ProductID = ?",
+                    (item['Quantity'], item['ProductID'])
                 )
 
             # Очистка корзины
