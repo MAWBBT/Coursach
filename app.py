@@ -1,10 +1,19 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 import sqlite3
+import os
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 import traceback
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Секретный ключ для работы с Flask
+
+UPLOAD_FOLDER = 'static/images/products'  # Папка для хранения изображений
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Настройка подключения к базе данных SQLite
 DATABASE = 'auto_parts_store.db'
@@ -17,7 +26,18 @@ def get_db_connection():
 # Главная страница
 @app.route('/')
 def home():
-    return render_template('index.html')
+    conn = get_db_connection()
+    categories = conn.execute("SELECT * FROM Categories LIMIT 6").fetchall()
+    conn.close()
+    user = None
+    if 'user_id' in session:
+        conn = get_db_connection()
+        user = conn.execute(
+            "SELECT Login FROM Users WHERE UserID = ?", (session['user_id'],)
+        ).fetchone()
+        conn.close()
+
+    return render_template('index.html', categories=categories, user=user)
 
 # Страница регистрации
 @app.route('/register', methods=['GET', 'POST'])
@@ -210,9 +230,10 @@ def login():
 @app.route('/catalog')
 def catalog():
     conn = get_db_connection()
-    products = conn.execute("SELECT ProductID, ProductName, Price, StockQuantity FROM Products").fetchall()
+    categories = conn.execute("SELECT * FROM Categories").fetchall()
+    products = conn.execute("SELECT * FROM Products").fetchall()
     conn.close()
-    return render_template('catalog.html', products=products)
+    return render_template('catalog.html', products=products, categories=categories)
 
 @app.route('/catalog/<int:category_id>')
 def catalog_by_category(category_id):
@@ -246,6 +267,39 @@ def edit_category(category_id):
             conn.close()
 
     return redirect(url_for('admin_panel'))
+
+@app.route('/delete_order/<int:order_id>', methods=['POST'])
+def delete_order(order_id):
+    if 'user_id' not in session:
+        flash('Для удаления заказа необходимо войти в систему.', 'error')
+        return redirect(url_for('login'))
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Проверка, принадлежит ли заказ текущему пользователю
+        order = conn.execute(
+            "SELECT * FROM Orders WHERE OrderID = ? AND UserID = ?", 
+            (order_id, session['user_id'])
+        ).fetchone()
+
+        if not order:
+            flash('Заказ не найден или доступ запрещен!', 'error')
+            return redirect(url_for('orders'))
+
+        # Удаление элементов заказа из OrderItems
+        conn.execute("DELETE FROM OrderItems WHERE OrderID = ?", (order_id,))
+        # Удаление самого заказа
+        conn.execute("DELETE FROM Orders WHERE OrderID = ?", (order_id,))
+        conn.commit()
+        flash('Заказ успешно удален!', 'success')
+    except Exception as e:
+        flash(f'Ошибка при удалении заказа: {e}', 'error')
+    finally:
+        conn.close()
+
+    return redirect(url_for('orders'))
 
 @app.route('/delete_category/<int:category_id>', methods=['POST'])
 def delete_category(category_id):
@@ -552,54 +606,11 @@ def delete_user(user_id):
 # Добавление нового товара
 @app.route('/add_product', methods=['POST'])
 def add_product():
-    # Проверка роли пользователя
     if session.get('role') != 'admin':
         flash('Доступ запрещен!', 'error')
         return redirect(url_for('home'))
-
-    product_name = request.form['product_name']
-    price = request.form['price']
-    category_id = request.form['category_id']
-    manufacturer = request.form['manufacturer']
-    stock_quantity = request.form['stock_quantity']
-    compatibility = request.form['compatibility']
-    description = request.form['description']
 
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO Products (ProductName, Price, CategoryID, Manufacturer, StockQuantity, Compatibility, Description) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (product_name, price, category_id, manufacturer, stock_quantity, compatibility, description)
-        )
-        conn.commit()
-        flash('Товар успешно добавлен!', 'success')
-    except sqlite3.Error as e:
-        flash(f'Ошибка базы данных: {e}', 'error')
-    finally:
-        if conn:
-            conn.close()
-
-    return redirect(url_for('admin_panel'))
-
-# Редактирование товара
-@app.route('/edit_product/<int:product_id>', methods=['GET', 'POST'])
-def edit_product(product_id):
-    # Проверка роли пользователя
-    if session.get('role') != 'admin':
-        flash('Доступ запрещен!', 'error')
-        return redirect(url_for('home'))
-
-    conn = get_db_connection()
-    product = conn.execute("SELECT * FROM Products WHERE ProductID = ?", (product_id,)).fetchone()
-
-    if not product:
-        flash('Товар не найден!', 'error')
-        return redirect(url_for('admin_panel'))
-
-    if request.method == 'POST':
-        # Получение данных из формы
         product_name = request.form['product_name']
         price = request.form['price']
         category_id = request.form['category_id']
@@ -607,31 +618,92 @@ def edit_product(product_id):
         stock_quantity = request.form['stock_quantity']
         compatibility = request.form['compatibility']
         description = request.form['description']
+        image = request.files.get('image')  # Получаем файл изображения
 
-        try:
-            # Обновление данных о товаре
+        # Сохранение изображения
+        filename = None
+        if image and allowed_file(image.filename):
+            filename = secure_filename(image.filename)
+            image.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
+        conn = get_db_connection()
+        conn.execute(
+            """
+            INSERT INTO Products 
+            (ProductName, Price, CategoryID, Manufacturer, StockQuantity, Compatibility, Description, Image) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (product_name, price, category_id, manufacturer, stock_quantity, compatibility, description, filename)
+        )
+        conn.commit()
+        flash('Товар успешно добавлен!', 'success')
+    except Exception as e:
+        flash(f'Ошибка: {e}', 'error')
+    finally:
+        conn.close()
+
+    return redirect(url_for('admin_panel'))
+
+# Редактирование товара
+@app.route('/edit_product/<int:product_id>', methods=['GET', 'POST'])
+def edit_product(product_id):
+    # Проверка прав доступа
+    if session.get('role') != 'admin':
+        flash('Доступ запрещен!', 'error')
+        return redirect(url_for('home'))
+
+    try:
+        conn = get_db_connection()
+        product = conn.execute(
+            "SELECT * FROM Products WHERE ProductID = ?", (product_id,)
+        ).fetchone()
+
+        if not product:
+            flash('Товар не найден!', 'error')
+            return redirect(url_for('admin_panel'))
+
+        if request.method == 'POST':
+            # Обработка данных формы (POST)
+            product_name = request.form['product_name']
+            price = request.form['price']
+            category_id = request.form['category_id']
+            manufacturer = request.form['manufacturer']
+            stock_quantity = request.form['stock_quantity']
+            compatibility = request.form['compatibility']
+            description = request.form['description']
+            image = request.files.get('image')
+
+            # Логика сохранения нового изображения (если загружено)
+            filename = product['Image']  # По умолчанию оставляем старое изображение
+            if image and allowed_file(image.filename):
+                filename = secure_filename(image.filename)
+                image.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
+            # Обновление данных товара в базе данных
             conn.execute(
                 """
-                UPDATE Products
-                SET ProductName = ?, Price = ?, CategoryID = ?, Manufacturer = ?,
-                    StockQuantity = ?, Compatibility = ?, Description = ?
+                UPDATE Products 
+                SET ProductName = ?, Price = ?, CategoryID = ?, Manufacturer = ?, 
+                    StockQuantity = ?, Compatibility = ?, Description = ?, Image = ?
                 WHERE ProductID = ?
                 """,
-                (product_name, price, category_id, manufacturer, stock_quantity, compatibility, description, product_id)
+                (product_name, price, category_id, manufacturer, stock_quantity, 
+                 compatibility, description, filename, product_id)
             )
             conn.commit()
+
             flash('Товар успешно обновлен!', 'success')
             return redirect(url_for('admin_panel'))
-        except sqlite3.Error as e:
-            flash(f'Ошибка базы данных: {e}', 'error')
-        finally:
-            conn.close()
 
-    # Получение списка категорий для выпадающего списка
-    categories = conn.execute("SELECT * FROM Categories").fetchall()
-    conn.close()
+        # Для GET-запроса: отображение формы редактирования
+        categories = conn.execute("SELECT * FROM Categories").fetchall()
+        conn.close()
 
-    return render_template('edit_product.html', product=product, categories=categories)
+        return render_template('edit_product.html', product=product, categories=categories)
+
+    except Exception as e:
+        flash(f'Ошибка: {e}', 'error')
+        return redirect(url_for('admin_panel'))
 
 @app.route('/add_category', methods=['POST'])
 def add_category():

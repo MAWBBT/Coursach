@@ -34,6 +34,7 @@ def create_database_and_tables():
                 Manufacturer TEXT,
                 StockQuantity INTEGER DEFAULT 0,
                 Compatibility TEXT,
+                Image TEXT,
                 FOREIGN KEY (CategoryID) REFERENCES Categories(CategoryID)
             )
             """,
