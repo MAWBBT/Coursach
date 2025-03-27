@@ -22,6 +22,14 @@
                 {% endif %}
             </ul>
         </nav>
+        {% if session.get('role') == 'admin' %}
+            <nav class="admin-nav">
+                <ul>
+                    <li><a href="{{ url_for('admin_panel') }}">Административная панель</a></li>
+                    <li><a href="{{ url_for('manage_users') }}">Управление пользователями</a></li>
+                </ul>
+            </nav>
+        {% endif %}
     </header>
 
     <main>
@@ -40,7 +48,7 @@
     </main>
 
     <footer>
-        <p>&copy; 2023 Магазин автозапчастей</p>
+        <p>&copy; 2025 Магазин автозапчастей</p>
     </footer>
 </body>
 </html>

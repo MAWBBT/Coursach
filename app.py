@@ -55,6 +55,43 @@ def register():
 
     return render_template('register.html')
 
+@app.route('/manage_users')
+def manage_users():
+    # Проверка роли пользователя
+    if session.get('role') != 'admin':
+        flash('Доступ запрещен!', 'error')
+        return redirect(url_for('home'))
+
+    # Получение списка пользователей из базы данных
+    conn = get_db_connection()
+    users = conn.execute("SELECT * FROM Users").fetchall()
+    conn.close()
+
+    return render_template('manage_users.html', users=users)
+
+@app.route('/update_user_role/<int:user_id>', methods=['POST'])
+def update_user_role(user_id):
+    # Проверка роли пользователя
+    if session.get('role') != 'admin':
+        flash('Доступ запрещен!', 'error')
+        return redirect(url_for('home'))
+
+    new_role = request.form['role']
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE Users SET Role = ? WHERE UserID = ?", (new_role, user_id))
+        conn.commit()
+        flash('Роль пользователя успешно обновлена!', 'success')
+    except sqlite3.Error as e:
+        flash(f'Ошибка базы данных: {e}', 'error')
+    finally:
+        if conn:
+            conn.close()
+
+    return redirect(url_for('manage_users'))
+
 # Страница авторизации
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -97,9 +134,66 @@ def login():
 @app.route('/catalog')
 def catalog():
     conn = get_db_connection()
+    categories = conn.execute("SELECT * FROM Categories").fetchall()
     products = conn.execute("SELECT * FROM Products").fetchall()
     conn.close()
-    return render_template('catalog.html', products=products)
+    return render_template('catalog.html', products=products, categories=categories)
+
+@app.route('/catalog/<int:category_id>')
+def catalog_by_category(category_id):
+    conn = get_db_connection()
+    categories = conn.execute("SELECT * FROM Categories").fetchall()
+    products = conn.execute(
+        "SELECT * FROM Products WHERE CategoryID = ?", (category_id,)
+    ).fetchall()
+    conn.close()
+    return render_template('catalog.html', products=products, categories=categories)
+
+@app.route('/edit_category/<int:category_id>', methods=['POST'])
+def edit_category(category_id):
+    # Проверка роли пользователя
+    if session.get('role') != 'admin':
+        flash('Доступ запрещен!', 'error')
+        return redirect(url_for('home'))
+
+    new_name = request.form['new_name']
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE Categories SET CategoryName = ? WHERE CategoryID = ?", (new_name, category_id))
+        conn.commit()
+        flash('Категория успешно обновлена!', 'success')
+    except sqlite3.Error as e:
+        flash(f'Ошибка базы данных: {e}', 'error')
+    finally:
+        if conn:
+            conn.close()
+
+    return redirect(url_for('admin_panel'))
+
+@app.route('/delete_category/<int:category_id>', methods=['POST'])
+def delete_category(category_id):
+    # Проверка роли пользователя
+    if session.get('role') != 'admin':
+        flash('Доступ запрещен!', 'error')
+        return redirect(url_for('home'))
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Удаление категории из таблицы Categories
+        cursor.execute("DELETE FROM Categories WHERE CategoryID = ?", (category_id,))
+        conn.commit()
+        flash('Категория успешно удалена!', 'success')
+    except sqlite3.Error as e:
+        flash(f'Ошибка базы данных: {e}', 'error')
+    finally:
+        if conn:
+            conn.close()
+
+    return redirect(url_for('admin_panel'))
 
 @app.route('/add_to_cart/<int:product_id>', methods=['POST'])
 def add_to_cart(product_id):
@@ -176,17 +270,18 @@ def checkout():
 # Административная панель
 @app.route('/admin')
 def admin_panel():
-    # Проверка, является ли пользователь администратором
+    # Проверка роли пользователя
     if session.get('role') != 'admin':
         flash('Доступ запрещен!', 'error')
         return redirect(url_for('home'))
 
-    # Получение данных о товарах для отображения в админской панели
+    # Получение данных о товарах и категориях
     conn = get_db_connection()
     products = conn.execute("SELECT * FROM Products").fetchall()
+    categories = conn.execute("SELECT * FROM Categories").fetchall()
     conn.close()
 
-    return render_template('admin_panel.html', products=products)
+    return render_template('admin_panel.html', products=products, categories=categories)
 
 # Добавление нового товара
 @app.route('/add_product', methods=['POST'])
@@ -198,15 +293,19 @@ def add_product():
 
     product_name = request.form['product_name']
     price = request.form['price']
+    category_id = request.form['category_id']
+    manufacturer = request.form['manufacturer']
+    stock_quantity = request.form['stock_quantity']
+    compatibility = request.form['compatibility']
     description = request.form['description']
 
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO Products (ProductName, Price, Description, CategoryID, Manufacturer, StockQuantity, Compatibility) "
+            "INSERT INTO Products (ProductName, Price, CategoryID, Manufacturer, StockQuantity, Compatibility, Description) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (product_name, price, description, 1, 'Unknown', 10, 'Compatible with all cars')
+            (product_name, price, category_id, manufacturer, stock_quantity, compatibility, description)
         )
         conn.commit()
         flash('Товар успешно добавлен!', 'success')
@@ -233,6 +332,29 @@ def edit_product(product_id):
         cursor.execute("UPDATE Products SET Price = ? WHERE ProductID = ?", (new_price, product_id))
         conn.commit()
         flash('Товар успешно обновлен!', 'success')
+    except sqlite3.Error as e:
+        flash(f'Ошибка базы данных: {e}', 'error')
+    finally:
+        if conn:
+            conn.close()
+
+    return redirect(url_for('admin_panel'))
+
+@app.route('/add_category', methods=['POST'])
+def add_category():
+    # Проверка роли пользователя
+    if session.get('role') != 'admin':
+        flash('Доступ запрещен!', 'error')
+        return redirect(url_for('home'))
+
+    category_name = request.form['category_name']
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO Categories (CategoryName) VALUES (?)", (category_name,))
+        conn.commit()
+        flash('Категория успешно добавлена!', 'success')
     except sqlite3.Error as e:
         flash(f'Ошибка базы данных: {e}', 'error')
     finally:

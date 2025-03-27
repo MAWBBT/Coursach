@@ -1,0 +1,34 @@
+{% extends "index.html" %}
+
+{% block content %}
+<h2>Управление пользователями</h2>
+<div class="admin-sections">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Логин</th>
+                <th>Роль</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.UserID }}</td>
+                <td>{{ user.Login }}</td>
+                <td>
+                    <form action="{{ url_for('update_user_role', user_id=user.UserID) }}" method="POST">
+                        <select name="role">
+                            <option value="client" {% if user.Role == 'client' %}selected{% endif %}>Клиент</option>
+                            <option value="admin" {% if user.Role == 'admin' %}selected{% endif %}>Администратор</option>
+                        </select>
+                        <button type="submit">Обновить роль</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

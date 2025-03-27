@@ -3,6 +3,8 @@ body {
     margin: 0;
     padding: 0;
     background-color: #f4f4f4;
+    overflow-y: auto; /* Включение вертикальной прокрутки */
+    min-height: 100vh; /* Минимальная высота страницы */
 }
 
 header {
@@ -10,6 +12,19 @@ header {
     color: white;
     padding: 10px 20px;
     text-align: center;
+}
+
+button {
+    background-color: #4CAF50;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #45a049;
 }
 
 nav ul {
@@ -28,6 +43,9 @@ nav a {
 
 main {
     padding: 20px;
+    max-width: 1200px; /* Ограничение ширины контента */
+    margin: 0 auto; /* Центрирование контента */
+    overflow-y: auto; /* Прокрутка внутри main, если контент выходит за рамки */
 }
 
 .messages .success {
@@ -46,6 +64,59 @@ footer {
     position: fixed;
     bottom: 0;
     width: 100%;
+}
+
+/* Адаптация для мобильных устройств */
+@media (max-width: 768px) {
+    nav ul {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    header {
+        padding: 10px;
+    }
+
+    main {
+        padding: 10px;
+    }
+
+    .product-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .cart-items ul {
+        padding: 0;
+    }
+
+    .admin-sections table {
+        display: block;
+        overflow-x: auto;
+    }
+}
+
+/* Адаптация для планшетов */
+@media (min-width: 769px) and (max-width: 1024px) {
+    nav ul {
+        gap: 15px;
+    }
+
+    .product-list {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+}
+
+/* Адаптация для больших экранов */
+@media (min-width: 1025px) {
+    .product-list {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+    }
 }
 
 .cart-items ul {
@@ -72,9 +143,45 @@ footer {
     background-color: #cc0000;
 }
 
+.admin-sections {
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow-y: auto; /* Прокрутка внутри блока административной панели */
+    max-height: 600px; /* Ограничение высоты блока */
+}
+
 .admin-sections table {
     width: 100%;
     border-collapse: collapse;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+table th, table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+form {
+    margin-bottom: 15px;
+}
+
+form input, form select, form textarea {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
 }
 
 .admin-sections th, .admin-sections td {
@@ -85,4 +192,24 @@ footer {
 
 .admin-sections th {
     background-color: #f4f4f4;
+}
+
+.admin-nav {
+    background-color: #4CAF50;
+    padding: 10px;
+    text-align: center;
+}
+
+.admin-nav ul {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.admin-nav a {
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
 }
