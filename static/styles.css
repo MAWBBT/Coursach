@@ -543,3 +543,18 @@ input[type="number"] {
     margin-bottom: 20px;
     line-height: 1.5;
 }
+
+.view-more {
+    margin-top: 10px;
+    font-size: 0.9em;
+}
+
+.view-more a {
+    color: #6c757d; /* Серый цвет */
+    text-decoration: none;
+}
+
+.view-more a:hover {
+    text-decoration: underline;
+    color: #007bff; /* Цвет при наведении */
+}
