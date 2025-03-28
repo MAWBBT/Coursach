@@ -235,6 +235,43 @@ def catalog():
     conn.close()
     return render_template('catalog.html', products=products, categories=categories)
 
+@app.route('/search', methods=['GET'])
+def search():
+    query = request.args.get('query', '').strip()  # Получаем поисковый запрос
+    if not query:
+        flash('Введите поисковый запрос.', 'error')
+        return redirect(url_for('catalog'))
+
+    conn = get_db_connection()
+    products = conn.execute(
+        """
+        SELECT * FROM Products 
+        WHERE ProductName LIKE ? OR Description LIKE ?
+        """,
+        (f'%{query}%', f'%{query}%')
+    ).fetchall()
+
+    conn.close()
+
+    if not products:
+        flash('Товары не найдены.', 'info')
+
+    return render_template('catalog.html', products=products, query=query)
+
+@app.route('/product/<int:product_id>')
+def product_details(product_id):
+    conn = get_db_connection()
+    product = conn.execute(
+        "SELECT * FROM Products WHERE ProductID = ?", (product_id,)
+    ).fetchone()
+    conn.close()
+
+    if not product:
+        flash('Товар не найден!', 'error')
+        return redirect(url_for('catalog'))
+
+    return render_template('product_details.html', product=product)
+
 @app.route('/catalog/<int:category_id>')
 def catalog_by_category(category_id):
     conn = get_db_connection()

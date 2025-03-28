@@ -1,127 +1,20 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Вход</title>
-    <style>
-        /* Общие стили */
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-color: #f4f4f9;
-        }
+{% extends "index.html" %}
 
-        .auth-container {
-            background: #ffffff;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-        }
+{% block content %}
+<h2 class="jkpop">Вход в аккаунт</h2>
 
-        .auth-container h2 {
-            margin-bottom: 1.5rem;
-            color: #333333;
-        }
-
-        .auth-container form {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .auth-container input[type="text"],
-        .auth-container input[type="password"] {
-            padding: 0.8rem;
-            margin-bottom: 1rem;
-            border: 1px solid #cccccc;
-            border-radius: 4px;
-            font-size: 1rem;
-        }
-
-        .auth-container input[type="submit"] {
-            padding: 0.8rem;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-
-        .auth-container input[type="submit"]:hover {
-            background-color: #0056b3;
-        }
-
-        .auth-container a {
-            display: block;
-            margin-top: 1rem;
-            color: #007bff;
-            text-decoration: none;
-            font-size: 0.9rem;
-        }
-
-        .auth-container a:hover {
-            text-decoration: underline;
-        }
-
-        .flash-messages {
-            list-style: none;
-            padding: 0;
-            margin-bottom: 1rem;
-        }
-
-        .flash-messages li {
-            padding: 0.5rem;
-            border-radius: 4px;
-            margin-bottom: 0.5rem;
-        }
-
-        .flash-messages .success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-
-        .flash-messages .error {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-    </style>
-</head>
-<body>
-    <div class="auth-container">
-        <h2>Вход</h2>
-
-        <!-- Вывод флеш-сообщений -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <ul class="flash-messages">
-                    {% for category, message in messages %}
-                        <li class="{{ category }}">{{ message }}</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-        {% endwith %}
-
-        <form method="POST" action="{{ url_for('login') }}">
-            <label for="login">Логин</label>
-            <input type="text" id="login" name="login" placeholder="Введите ваш логин" required>
-
-            <label for="password">Пароль</label>
-            <input type="password" id="password" name="password" placeholder="Введите ваш пароль" required>
-
-            <button type="submit">Войти</button>
-        </form>
-
-        <a href="{{ url_for('register') }}">Нет аккаунта? Зарегистрируйтесь</a>
+<form method="POST" class="auth-form">
+    <div class="form-group">
+        <label for="login">Логин:</label>
+        <input type="text" id="login" name="login" required>
     </div>
-</body>
-</html>
+
+    <div class="form-group">
+        <label for="password">Пароль:</label>
+        <input type="password" id="password" name="password" required>
+    </div>
+
+    <button type="submit" class="jkpop1">Войти</button>
+    <p class="jkpop">Нет аккаунта? <a href="{{ url_for('register') }}">Зарегистрируйтесь здесь</a>.</p>
+</form>
+{% endblock %}

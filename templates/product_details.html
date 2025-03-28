@@ -1,0 +1,31 @@
+{% extends "index.html" %}
+
+{% block content %}
+<!-- Карточка товара -->
+<div class="product-detail">
+    <div class="product-images">
+        <img src="{{ url_for('static', filename='images/products/' ~ product.Image) }}" 
+             alt="{{ product.ProductName }}" 
+             class="main-image">
+    </div>
+
+    <div class="product-info">
+        <h2>{{ product.ProductName }}</h2>
+        <p class="price">{{ product.Price }} руб.</p>
+        <p class="manufacturer">Производитель: {{ product.Manufacturer }}</p>
+        <p class="stock">В наличии: {{ product.StockQuantity }} шт.</p>
+        <p class="compatibility">Совместимость: {{ product.Compatibility }}</p>
+        <p class="description">{{ product.Description }}</p>
+
+        <!-- Форма добавления в корзину -->
+        {% if product.StockQuantity > 0 %}
+        <form action="{{ url_for('add_to_cart', product_id=product.ProductID) }}" method="POST">
+            <input type="number" name="quantity" min="1" max="{{ product.StockQuantity }}" value="1" required>
+            <button type="submit" class="add-to-cart-btn">Добавить в корзину</button>
+        </form>
+        {% else %}
+        <p class="out-of-stock">Нет в наличии</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

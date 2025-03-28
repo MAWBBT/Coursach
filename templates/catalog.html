@@ -3,6 +3,14 @@
 {% block content %}
 <h2>Каталог товаров</h2>
 
+<!-- Форма поиска -->
+<div class="search-form">
+    <form method="GET" action="{{ url_for('search') }}">
+        <input type="text" name="query" placeholder="Поиск товаров..." value="{{ query or '' }}" required>
+        <button type="submit">Найти</button>
+    </form>
+</div>
+
 <!-- Фильтр по категориям -->
 <div class="categories-filter">
     <h3>Категории:</h3>
@@ -18,12 +26,16 @@
 <div class="product-grid">
     {% for product in products %}
     <div class="product-card">
-        <img src="{{ url_for('static', filename='images/products/' ~ product.Image) }}" 
-             alt="{{ product.ProductName }}" 
-             class="product-image">
-        <h3>{{ product.ProductName }}</h3>
-        <p>{{ product.Description | truncate(50) }}</p>
-        <p>Цена: {{ product.Price }} руб.</p>
+        <!-- Ссылка на страницу товара -->
+        <a href="{{ url_for('product_details', product_id=product.ProductID) }}">
+            <img src="{{ url_for('static', filename='images/products/' ~ product.Image) }}" 
+                 alt="{{ product.ProductName }}" 
+                 class="product-image">
+            <h3>{{ product.ProductName }}</h3>
+        </a>
+        
+        <p class="product-price">{{ product.Price }} руб.</p>
+        <p class="product-description">{{ product.Description | truncate(50) }}</p>
         <p>В наличии: {{ product.StockQuantity }} шт.</p>
 
         {% if product.StockQuantity > 0 %}
