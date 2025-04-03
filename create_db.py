@@ -107,4 +107,4 @@ def populate_data(cursor):
 
 # Запуск функции создания базы данных и таблиц
 if __name__ == "__main__":
-    create_database_and_tables()
+    create_database_and_tables() 
