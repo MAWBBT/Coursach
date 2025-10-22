@@ -4,10 +4,19 @@
 <h2 class="jkpop">Регистрация</h2>
 <form method="POST" class="auth-form">
     <label for="login">Логин:</label>
-    <input type="text" id="login" name="login" required><br>
+    <input type="text" 
+               id="login" 
+               name="login" 
+               pattern="[^!@#$%]*" 
+               title="Не используйте символы !@#$%" 
+               required><br>
 
     <label for="password">Пароль:</label>
-    <input type="password" id="password" name="password" required><br>
+    <input type="password" 
+               id="password" 
+               name="password" 
+               title="Пароль должен быть не менее 8 символов (максимум 150 символов)" 
+               required><br>
 
     <button type="submit" class="jkpop2">Зарегистрироваться</button>
     <p class="jkpop">Уже есть аккаунт? <a href="{{ url_for('login') }}">Войдите здесь</a>.</p>

@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 import sqlite3
 import os
+import re
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import traceback
@@ -45,6 +46,45 @@ def register():
     if request.method == 'POST':
         login = request.form['login']
         password = request.form['password']
+
+        # Валидация логина
+        if not login or len(login.strip()) == 0:
+            flash('Логин не может быть пустым!', 'error')
+            return redirect(url_for('register'))
+        
+        # Проверка длины логина (не больше 255 символов)
+        if len(login) > 150:
+            flash('Логин не может превышать 150 символов!', 'error')
+            return redirect(url_for('register'))
+        
+        # Проверка длины пароля (не больше 255 символов)
+        if len(password) > 150:
+            flash('Пароль не может превышать 150 символов!', 'error')
+            return redirect(url_for('register'))
+
+        # Проверка на запрещенные символы в логине
+        forbidden_pattern = r'[!@#$%]'
+        if re.search(forbidden_pattern, login):
+            flash('Логин содержит запрещенные символы: ! @ # $ %', 'error')
+            return redirect(url_for('register'))
+
+        # Дополнительная проверка на SQL-инъекции
+        sql_injection_patterns = [
+            r'(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|EXEC|ALTER|CREATE)\b)',
+            r'(\-\-|\/\*|\*\/|;)',
+            r'(\b(OR|AND)\b.*=)',
+            r'(\b(WAITFOR|DELAY)\b)'
+        ]
+        
+        for pattern in sql_injection_patterns:
+            if re.search(pattern, login, re.IGNORECASE) or re.search(pattern, password, re.IGNORECASE):
+                flash('Обнаружены недопустимые символы или конструкции!', 'error')
+                return redirect(url_for('register'))
+
+        # Проверка сложности пароля
+        if len(password) < 8:
+            flash('Пароль должен содержать минимум 8 символов!', 'error')
+            return redirect(url_for('register'))
 
         # Хеширование пароля
         password_hash = generate_password_hash(password)
