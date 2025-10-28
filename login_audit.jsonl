@@ -1,0 +1,16 @@
+{"time": "2025-10-28T09:02:26.252892Z", "user": "a4981be9c110302a127e08857872faa57e499e147f62019ba20ea559b6c0ca92", "ip": "127.0.0.1", "result": "failure", "reason": "bad_credentials"}
+{"time": "2025-10-28T09:02:44.169075Z", "user": "2a73ffa82ad639a7ab2458728973ca3e9ca5d89655304e87f67c417374f8d9ec", "ip": "127.0.0.1", "result": "failure", "reason": "bad_credentials"}
+{"time": "2025-10-28T09:02:46.617923Z", "user": "e6401e3931a0d63892eba68cae393677af3d00b080031adc6234685ca43c269b", "ip": "127.0.0.1", "result": "failure", "reason": "bad_credentials"}
+{"time": "2025-10-28T09:02:48.999234Z", "user": "30a596aef079dfd05ba99917a20d3a479d4fe2824f880b4b6243cf4360b41837", "ip": "127.0.0.1", "result": "failure", "reason": "bad_credentials"}
+{"time": "2025-10-28T09:02:50.880654Z", "user": "b09a8974aea118afe8ca411f88a623c7d2e2225a614180e408ea10ecf5a0ed25", "ip": "127.0.0.1", "result": "failure", "reason": "bad_credentials"}
+{"time": "2025-10-28T09:02:52.893995Z", "user": "fe7a964258fbf31fba927b914f93f10613b60eb522d6832dfbdd1628487e2304", "ip": "127.0.0.1", "result": "failure", "reason": "locked"}
+{"time": "2025-10-28T09:02:59.211828Z", "user": "fe7a964258fbf31fba927b914f93f10613b60eb522d6832dfbdd1628487e2304", "ip": "127.0.0.1", "result": "failure", "reason": "locked"}
+{"time": "2025-10-28T09:05:07.474808Z", "user": "b0e14e4ac65cd0a4ea737b2ba10c2f73e40ee19adc9f5d7f0f0baf60ab8665a6", "ip": "127.0.0.1", "result": "failure", "reason": "bad_credentials"}
+{"time": "2025-10-28T09:05:12.227777Z", "user": "d3a493ff3d317e864c4ce480f617ce7a803ed9b1ad9229609d0a418d9bbe896b", "ip": "127.0.0.1", "result": "failure", "reason": "bad_credentials"}
+{"time": "2025-10-28T09:05:14.052235Z", "user": "b09f1052775a5a311278589f54ff05f230a8f814de4e22bd9e91bac44eb1c866", "ip": "127.0.0.1", "result": "failure", "reason": "bad_credentials"}
+{"time": "2025-10-28T09:05:16.835591Z", "user": "7a5d6eb72b07e21237419fd791a49b2f3ef4f6e6de2cd205e05489b3e2d08f2d", "ip": "127.0.0.1", "result": "failure", "reason": "bad_credentials"}
+{"time": "2025-10-28T09:05:18.861075Z", "user": "3317614311b20fc83204be9c09ad60b99aaec31dd077d09ac7d8aa235bb44c37", "ip": "127.0.0.1", "result": "failure", "reason": "bad_credentials"}
+{"time": "2025-10-28T09:05:24.924993Z", "user": "4a6839bd1562f8fe6718c3ed97c4894211db9c307ac80ab709ba10db8e5e948e", "ip": "127.0.0.1", "result": "failure", "reason": "locked"}
+{"time": "2025-10-28T09:05:30.480727Z", "user": "03d42befdff303093313f8fe92895197e831c7e4dc7307916cff7e24c9739eaa", "ip": "127.0.0.1", "result": "failure", "reason": "locked"}
+{"time": "2025-10-28T09:05:45.387270Z", "user": "4279f81ce8e029fcfaddf8d501280912d80b93db51550eb43bbe6d264373fbce", "ip": "127.0.0.1", "result": "failure", "reason": "locked"}
+{"time": "2025-10-28T09:05:51.589974Z", "user": "719ba202b137aea30622e43e4652a83714a0bf1fc792926c5f13bac20b640c49", "ip": "127.0.0.1", "result": "failure", "reason": "locked"}

@@ -2,6 +2,10 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 import sqlite3
 import os
 import re
+import hashlib
+import json
+from datetime import datetime, timedelta
+from threading import Lock
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import traceback
@@ -23,6 +27,146 @@ def get_db_connection():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
+
+# Конфигурация безопасного входа
+LOGIN_PEPPER = os.environ.get('LOGIN_PEPPER', 'static_pepper_change_me')
+MAX_ATTEMPTS_PER_IP = int(os.environ.get('MAX_ATTEMPTS_PER_IP', '5'))
+MAX_ATTEMPTS_PER_ACCOUNT = int(os.environ.get('MAX_ATTEMPTS_PER_ACCOUNT', '5'))
+LOCKOUT_MINUTES = int(os.environ.get('LOCKOUT_MINUTES', '15'))
+RATE_WINDOW_MINUTES = int(os.environ.get('RATE_WINDOW_MINUTES', '15'))
+
+# Алерты
+ALERT_WINDOW_MINUTES = int(os.environ.get('ALERT_WINDOW_MINUTES', '10'))
+ALERT_THRESHOLD = int(os.environ.get('ALERT_THRESHOLD', '10'))
+
+# Файлы логов
+LOGIN_LOG_FILE = os.environ.get('LOGIN_LOG_FILE', 'login_audit.jsonl')
+
+# Память для попыток
+ip_attempts = {}
+user_attempts = {}
+ip_lockout_until = {}
+user_lockout_until = {}
+attempts_lock = Lock()
+log_file_lock = Lock()
+
+def compute_login_hash(login_value: str) -> str:
+    """Детерминированный хеш логина для хранения и поиска."""
+    normalized = (login_value or '').strip().lower()
+    to_hash = (normalized + '|' + LOGIN_PEPPER).encode('utf-8')
+    return hashlib.sha256(to_hash).hexdigest()
+
+def ensure_login_hash_column_and_backfill():
+    """Гарантирует наличие столбца LoginHash и заполняет его для существующих записей."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        # Проверяем наличие столбца
+        columns = cur.execute("PRAGMA table_info(Users)").fetchall()
+        column_names = {col[1] for col in columns}
+        if 'LoginHash' not in column_names:
+            cur.execute("ALTER TABLE Users ADD COLUMN LoginHash TEXT")
+            conn.commit()
+        # Бэкофилл
+        rows = cur.execute("SELECT UserID, Login, LoginHash FROM Users").fetchall()
+        for row in rows:
+            if not row['LoginHash']:
+                cur.execute(
+                    "UPDATE Users SET LoginHash = ? WHERE UserID = ?",
+                    (compute_login_hash(row['Login']), row['UserID'])
+                )
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_client_ip() -> str:
+    # X-Forwarded-For для прокси, иначе remote_addr
+    xff = request.headers.get('X-Forwarded-For', '')
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.remote_addr or '0.0.0.0'
+
+def _prune_old_attempts(storage: dict, window_minutes: int):
+    cutoff = datetime.utcnow() - timedelta(minutes=window_minutes)
+    for key, times in list(storage.items()):
+        storage[key] = [t for t in times if t >= cutoff]
+        if not storage[key]:
+            del storage[key]
+
+def get_remaining_attempts(ip: str, user_key: str) -> int:
+    """Возвращает минимальное число оставшихся попыток между IP и аккаунтом в текущем окне."""
+    with attempts_lock:
+        _prune_old_attempts(ip_attempts, RATE_WINDOW_MINUTES)
+        _prune_old_attempts(user_attempts, RATE_WINDOW_MINUTES)
+        ip_used = len(ip_attempts.get(ip, []))
+        user_used = len(user_attempts.get(user_key, []))
+        remaining_ip = max(0, MAX_ATTEMPTS_PER_IP - ip_used)
+        remaining_user = max(0, MAX_ATTEMPTS_PER_ACCOUNT - user_used)
+        return min(remaining_ip, remaining_user)
+
+def record_attempt(ip: str, user_key: str, success: bool, reason: str = ''):
+    """Регистрирует попытку входа, обновляет лимиты и пишет лог."""
+    now = datetime.utcnow()
+    with attempts_lock:
+        # Привязываем временные окна
+        _prune_old_attempts(ip_attempts, RATE_WINDOW_MINUTES)
+        _prune_old_attempts(user_attempts, RATE_WINDOW_MINUTES)
+        ip_attempts.setdefault(ip, []).append(now)
+        user_attempts.setdefault(user_key, []).append(now)
+        # Сброс при успехе
+        if success:
+            ip_attempts.pop(ip, None)
+            user_attempts.pop(user_key, None)
+            ip_lockout_until.pop(ip, None)
+            user_lockout_until.pop(user_key, None)
+        else:
+            # Проверяем превышение
+            if len(ip_attempts.get(ip, [])) >= MAX_ATTEMPTS_PER_IP:
+                ip_lockout_until[ip] = now + timedelta(minutes=LOCKOUT_MINUTES)
+            if len(user_attempts.get(user_key, [])) >= MAX_ATTEMPTS_PER_ACCOUNT:
+                user_lockout_until[user_key] = now + timedelta(minutes=LOCKOUT_MINUTES)
+
+    # Логируем попытку в файл
+    entry = {
+        "time": now.isoformat() + 'Z',
+        "user": user_key,
+        "ip": ip,
+        "result": "success" if success else "failure",
+        "reason": reason,
+    }
+    with log_file_lock:
+        with open(LOGIN_LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    # Простой анализ для алертов
+    try:
+        window_cut = datetime.utcnow() - timedelta(minutes=ALERT_WINDOW_MINUTES)
+        # Считаем фейлы по юзеру и IP в памяти
+        fails_user = [t for t in user_attempts.get(user_key, []) if t >= window_cut]
+        fails_ip = [t for t in ip_attempts.get(ip, []) if t >= window_cut]
+        if len(fails_user) > ALERT_THRESHOLD:
+            app.logger.warning(f"ALERT: много неудачных попыток для пользователя {user_key}: {len(fails_user)} за {ALERT_WINDOW_MINUTES} мин.")
+        if len(fails_ip) > ALERT_THRESHOLD:
+            app.logger.warning(f"ALERT: много неудачных попыток с IP {ip}: {len(fails_ip)} за {ALERT_WINDOW_MINUTES} мин.")
+    except Exception:
+        # Не мешаем основному потоку входа, если анализ упал
+        pass
+
+def is_locked(ip: str, user_key: str) -> tuple:
+    now = datetime.utcnow()
+    ip_until = ip_lockout_until.get(ip)
+    user_until = user_lockout_until.get(user_key)
+    if ip_until and ip_until > now:
+        return True, f"Превышен лимит попыток с IP. Попробуйте после {ip_until.strftime('%H:%M:%S UTC')}."
+    if user_until and user_until > now:
+        return True, f"Аккаунт временно заблокирован. Попробуйте после {user_until.strftime('%H:%M:%S UTC')}."
+    return False, ''
+
+# Инициализация схемы для LoginHash на старте
+try:
+    ensure_login_hash_column_and_backfill()
+except Exception as _e:
+    app.logger.error(f"Не удалось подготовить столбец LoginHash: {_e}")
 
 # Главная страница
 @app.route('/')
@@ -86,15 +230,16 @@ def register():
             flash('Пароль должен содержать минимум 8 символов!', 'error')
             return redirect(url_for('register'))
 
-        # Хеширование пароля
+        # Хеширование пароля и логина
         password_hash = generate_password_hash(password)
+        login_hash = compute_login_hash(login)
 
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
 
             # Проверка на уникальность логина
-            cursor.execute("SELECT * FROM Users WHERE Login = ?", (login,))
+            cursor.execute("SELECT * FROM Users WHERE LoginHash = ?", (login_hash,))
             existing_user = cursor.fetchone()
 
             if existing_user:
@@ -102,7 +247,7 @@ def register():
                 return redirect(url_for('register'))
 
             # Добавление нового пользователя
-            cursor.execute("INSERT INTO Users (Login, PasswordHash) VALUES (?, ?)", (login, password_hash))
+            cursor.execute("INSERT INTO Users (Login, PasswordHash, LoginHash) VALUES (?, ?, ?)", (login, password_hash, login_hash))
             conn.commit()
             flash('Регистрация прошла успешно!', 'success')
             return redirect(url_for('login'))
@@ -232,13 +377,22 @@ def login():
             return redirect(url_for('login'))
 
         try:
+            client_ip = get_client_ip()
+            user_key = compute_login_hash(login)
+
+            # Проверка блокировок
+            locked, msg = is_locked(client_ip, user_key)
+            if locked:
+                flash(msg, 'error')
+                record_attempt(client_ip, user_key, False, reason='locked')
+                return redirect(url_for('login'))
             # Подключение к базе данных
             conn = get_db_connection()
             cursor = conn.cursor()
 
             # Поиск пользователя в базе данных
             user = cursor.execute(
-                "SELECT * FROM Users WHERE Login = ?", (login,)
+                "SELECT * FROM Users WHERE LoginHash = ?", (user_key,)
             ).fetchone()
 
             if user and check_password_hash(user['PasswordHash'], password):
@@ -246,6 +400,7 @@ def login():
                 session['user_id'] = user['UserID']
                 session['role'] = user['Role']
                 flash('Вы успешно вошли!', 'success')
+                record_attempt(client_ip, user_key, True)
 
                 # Перенаправление в зависимости от роли пользователя
                 if user['Role'] == 'admin':
@@ -253,7 +408,15 @@ def login():
                 else:
                     return redirect(url_for('home'))
             else:
-                flash('Неверный логин или пароль!', 'error')
+                # Записываем неудачу, затем сообщаем оставшиеся попытки/блокировку
+                record_attempt(client_ip, user_key, False, reason='bad_credentials')
+                # Проверяем — заблокировали ли прямо сейчас
+                locked_after, msg_after = is_locked(client_ip, user_key)
+                if locked_after:
+                    flash(msg_after, 'error')
+                else:
+                    remaining = get_remaining_attempts(client_ip, user_key)
+                    flash(f'Неверный логин или пароль! Осталось попыток: {remaining}', 'error')
                 return redirect(url_for('login'))
 
         except Exception as e:
